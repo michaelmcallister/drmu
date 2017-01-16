@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/spf13/viper"
 	"goji.io"
 	"goji.io/pat"
@@ -17,9 +19,9 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	err := initConfig()
+	client, err := initConfig()
 	if err != nil {
-		fmt.Println("Init error:", err)
+		fmt.Println("Failed to initialize configuration:", err)
 		return
 	}
 
@@ -29,7 +31,7 @@ func main() {
 	http.ListenAndServe("localhost:8000", mux)
 }
 
-func initConfig() error {
+func initConfig() (*route53.Route53, error) {
 	os.Setenv("AWS_SDK_LOAD_CONFIG", "1")
 
 	userConfig := viper.New()
@@ -37,8 +39,24 @@ func initConfig() error {
 	userConfig.AddConfigPath(".")
 	userConfig.AddConfigPath("config")
 	err := userConfig.ReadInConfig()
+
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+
+	sess, err := session.NewSession()
+
+	if err != nil {
+		fmt.Println("Failed to create session:", err)
+		return nil, err
+	}
+
+	client := route53.New(sess)
+
+	if err != nil {
+		fmt.Println("Failed to create client:", err)
+		return nil, err
+	}
+
+	return client, nil
 }
