@@ -1,1 +1,3 @@
-#
+hostedzone: HOSTED_ZONE_ID 
+listenaddress: localhost
+listenport: 8000

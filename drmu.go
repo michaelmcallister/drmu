@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -13,9 +12,12 @@ import (
 	"goji.io/pat"
 )
 
+var cfg = viper.New()
+
 func updateHandler(w http.ResponseWriter, r *http.Request) {
 	domain_name := pat.Param(r, "domainName")
 	ip := pat.Param(r, "ipAddress")
+	client := getClient()
 	fmt.Fprintf(w, "Updating %s to %s", domain_name, ip)
 
 	params := &route53.ChangeResourceRecordSetsInput{
@@ -37,7 +39,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 			},
 			Comment: aws.String("Updated by DRMU"),
 		},
-		HostedZoneId: aws.String(""),
+		HostedZoneId: aws.String(cfg.GetString("hostedzone")),
 	}
 	resp, err := client.ChangeResourceRecordSets(params)
 
@@ -50,52 +52,52 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	client, mux, err := initConfig()
+	mux, err := initConfig()
 
-	if err != nil || client == nil || mux == nil {
+	if err != nil || mux == nil {
 		fmt.Println("Failed to initialize configuration:", err)
 		return
 	}
 
-	mux.HandleFunc(pat.Get("/drmu/update/:domainName/:ipAddress"), updateHandler)
-	http.ListenAndServe("localhost:8000", mux)
+	http.ListenAndServe(fmt.Sprintf("%s:%s", cfg.GetString("listenaddress"), cfg.GetString("listenport")), mux)
 }
 
-func initConfig() (*route53.Route53, *goji.Mux, error) {
-	os.Setenv("AWS_SDK_LOAD_CONFIG", "1")
-
-	userConfig := viper.New()
-	userConfig.SetConfigName("app")
-	userConfig.AddConfigPath(".")
-	userConfig.AddConfigPath("config")
-	err := userConfig.ReadInConfig()
+func initConfig() (*goji.Mux, error) {
+	cfg.SetConfigName("app")
+	cfg.AddConfigPath(".")
+	cfg.AddConfigPath("config")
+	err := cfg.ReadInConfig()
 
 	if err != nil {
-		return nil, nil, err
-	}
-
-	sess, err := session.NewSession()
-
-	if err != nil {
-		fmt.Println("Failed to create session:", err)
-		return nil, nil, err
-	}
-
-	client := route53.New(sess)
-
-	if err != nil {
-		fmt.Println("Failed to create client:", err)
-		return nil, nil, err
+		fmt.Println("Failed to get config:", err)
+		return nil, err
 	}
 
 	mux := goji.NewMux()
 
 	if mux == nil {
 		fmt.Println("Failed to instantiate HTTP routing engine:", err)
-		return nil, nil, err
+		return nil, err
 	} else {
-		//mux.HandleFunc(pat.Get("/drmu/update/:domainName/:ipAddress"), updateHandler)
+		mux.HandleFunc(pat.Get("/drmu/update/:domainName/:ipAddress"), updateHandler)
 	}
 
-	return client, mux, nil
+	return mux, nil
+}
+
+func getClient() *route53.Route53 {
+	sess, err := session.NewSession()
+	if err != nil {
+		fmt.Println("Failed to create session:", err)
+		return nil
+	}
+
+	client := route53.New(sess)
+
+	if err != nil {
+		fmt.Println("Failed to create client:", err)
+		return nil
+	}
+
+	return client
 }
