@@ -1,0 +1,22 @@
+# Domain to be added to your DHCP-clients hostname
+:local topdomain;
+:set topdomain "dhcp.<DOMAIN>.com";
+
+# Set variables to use
+:local hostname;
+:local hostip;
+:local free;
+
+/ip dhcp-server lease ;
+:foreach i in=[find] do={
+ /ip dhcp-server lease ;
+ :if ([:len [get $i host-name]] > 0) do={
+   :set free "true";
+   :set hostname ([get $i host-name] . "." . $topdomain);
+   :set hostip [get $i address];
+   :if ($free = true) do={
+     :put ("Adding: " . $hostname . " : " . $hostip ) ;
+     /tool fetch url="http://10.1.3.105:8000/drmu/update/$hostname/$hostip"
+   }
+ }
+}
